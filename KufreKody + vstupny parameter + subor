@@ -1,0 +1,103 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include <time.h>
+
+#define MAX_KUFOROV 10        // Maximálny počet kufrov (maximálny počet zamestnancov/kufrov)
+#define MAX_POKUSOV 10000     // Maximálny počet pokusov na hádanie kódu
+#define KOD_DLZKA 4           // Dĺžka kódu (4 číslice)
+
+// Štruktúra, ktorá obsahuje údaje o zamestnancovi
+typedef struct {
+    int id;                  // ID zamestnanca
+    int pocet_pokusov;       // Počet pokusov, ktoré zamestnanec vykonal
+    char kod[KOD_DLZKA + 1]; // Kód pre konkrétny kufor (ukončený nulovým znakom)
+    int nasiel_kod;          // Zástavka, či zamestnanec našiel správny kód
+} Pracovnik;
+
+// Funkcia, ktorú každý zamestnanec (vlákno) volá, aby hádal kód
+void *hadej_kod(void *arg) {
+    Pracovnik *pracovnik = (Pracovnik *)arg; // Pretypovanie argumentu na ukazovateľ na štruktúru Pracovnik
+    srand(time(NULL) + pracovnik->id);       // Inicializácia generátora náhodných čísel pre každého zamestnanca
+
+    char pokus[KOD_DLZKA + 1];               // Dočasné pole na uloženie pokusu o kód
+
+    // Cyklus na generovanie pokusov
+    for (int i = 0; i < MAX_POKUSOV; i++) {
+        for (int j = 0; j < KOD_DLZKA; j++) {
+            pokus[j] = '0' + (rand() % 10); // Generovanie náhodného čísla 0-9 pre každý znak kódu
+        }
+        pokus[KOD_DLZKA] = '\0';           // Ukončenie reťazca nulovým znakom
+
+        pracovnik->pocet_pokusov++;        // Zvýšenie počtu pokusov zamestnanca
+
+        // Ak je pokus správny (zodpovedá správnemu kódu), nastaví sa príznak a vlákno sa ukončí
+        if (strcmp(pokus, pracovnik->kod) == 0) {
+            pracovnik->nasiel_kod = 1;
+            printf("Pracovník %d našiel kód %s po %d pokusoch.\n", pracovnik->id, pokus, pracovnik->pocet_pokusov);
+            pthread_exit(NULL); // Ukončenie vlákna
+        }
+    }
+
+    // Ak sa kód nepodarilo nájsť po maximálnom počte pokusov
+    pracovnik->nasiel_kod = 0;
+    printf("Pracovník %d nenašiel kód po %d pokusoch.\n", pracovnik->id, pracovnik->pocet_pokusov);
+    pthread_exit(NULL); // Ukončenie vlákna
+}
+
+int main(int argc, char *argv[]) {
+    // Overenie počtu argumentov
+    if (argc != 3) {
+        fprintf(stderr, "Použitie: %s <pocet_pracovnikov> <subor_s_kodmi>\n", argv[0]);
+        return 1;
+    }
+
+    int pocet_pracovnikov = atoi(argv[1]); // Prevod prvého argumentu na počet pracovníkov
+    if (pocet_pracovnikov > MAX_KUFOROV) {
+        fprintf(stderr, "Maximálny počet kufrov je %d\n", MAX_KUFOROV);
+        return 1;
+    }
+
+    char kody[MAX_KUFOROV][KOD_DLZKA + 1]; // Pole na uloženie kódov pre jednotlivé kufre
+    FILE *subor = fopen(argv[2], "r");     // Otvorenie súboru s kódmi
+    if (subor == NULL) {
+        perror("Nepodarilo sa otvoriť súbor");
+        return 1;
+    }
+
+    // Načítanie kódov zo súboru do poľa `kody`
+    for (int i = 0; i < pocet_pracovnikov; i++) {
+        if (fscanf(subor, "%4s", kody[i]) != 1) {
+            fprintf(stderr, "Nepodarilo sa načítať kód pre kufor %d\n", i);
+            fclose(subor);
+            return 1;
+        }
+    }
+    fclose(subor); // Zatvorenie súboru
+
+    pthread_t vlakna[pocet_pracovnikov];          // Pole pre vlákna
+    Pracovnik pracovnici[pocet_pracovnikov];      // Pole pre štruktúry zamestnancov
+
+    // Inicializácia údajov pre jednotlivých zamestnancov a vytvorenie vlákien
+    for (int i = 0; i < pocet_pracovnikov; i++) {
+        pracovnici[i].id = i;
+        pracovnici[i].pocet_pokusov = 0;
+        strncpy(pracovnici[i].kod, kody[i], KOD_DLZKA + 1); // Skopírovanie kódu do štruktúry zamestnanca
+        pracovnici[i].nasiel_kod = 0;
+
+        // Vytvorenie vlákna pre každého zamestnanca
+        if (pthread_create(&vlakna[i], NULL, hadej_kod, &pracovnici[i]) != 0) {
+            perror("Chyba pri vytváraní vlákna");
+            return 1;
+        }
+    }
+
+    // Počkajte na dokončenie všetkých vlákien
+    for (int i = 0; i < pocet_pracovnikov; i++) {
+        pthread_join(vlakna[i], NULL);
+    }
+
+    printf("Testovanie ukončené.\n");
+    return 0;
+}
