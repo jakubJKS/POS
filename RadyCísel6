@@ -1,0 +1,77 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<pthread.h>
+
+#define HODY_KOCKOU 1595
+#define KAMARATI 5
+
+typedef struct{
+    int dlzka_sekvencie[HODY_KOCKOU];
+    int index;
+} Vysledky;
+
+Vysledky vysledky[KAMARATI];
+
+void *hod_kockou(void *arg){
+    int id = *(int *)arg;
+    int opakovanie = 0;
+
+    for(int i = 0; i<HODY_KOCKOU; i++){
+        int hod = rand() % 6 + 1;
+        if (hod == 6){
+            opakovanie++;
+        } else {
+            if (opakovanie>0){
+                vysledky[id].dlzka_sekvencie[vysledky[id].index++] = opakovanie;
+                opakovanie = 0;
+            }
+        }
+    }
+
+    if (opakovanie > 0){
+        vysledky[id].dlzka_sekvencie[vysledky[id].index++] = opakovanie;
+    }
+
+    pthread_exit(NULL);
+}
+
+int main(){
+    pthread_t vlakna[KAMARATI];
+    int id[KAMARATI];
+
+    for (int i = 0; i < KAMARATI; i++) {
+        id[i]=i;
+        vysledky[i].index = 0;
+        pthread_create(&vlakna[i], NULL, hod_kockou, (void *)&id[i]);
+    }
+
+    for (int j = 0; j<KAMARATI;j++) {
+        pthread_join(vlakna[j],NULL);
+    }
+
+    // Výpis výsledkov pre každého kamaráta
+    for (int i = 0; i < KAMARATI; i++) {
+        printf("Kamarát %d:\n", i + 1);
+
+        // Vytvorenie frekvenčnej tabuľky
+        int frekvencia[6] = {0};     // indexy 1-5 reprezentujú dĺžky 1 až >=5
+
+        for (int j = 0; j < vysledky[i].index; j++) {
+            int dlzka = vysledky[i].dlzka_sekvencie[j];
+            if (dlzka >= 5) {
+                frekvencia[5]++;     // pre dĺžky 5 a viac
+            } else {
+                frekvencia[dlzka - 1]++;
+            }
+        }
+
+        // Výpis frekvenčnej tabuľky pre aktuálneho kamaráta
+        for (int j = 0; j < 5; j++) {
+            printf(" %d -> %d\n", j + 1, frekvencia[j]);
+        }
+        printf(" >=5 -> %d\n", frekvencia[5]);
+        printf("\n");
+    }
+
+    return 0;
+}
