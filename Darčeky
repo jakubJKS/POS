@@ -1,0 +1,95 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <time.h>
+
+#define TYPE_COUNT 3 // Počet typov darčekov
+
+typedef struct {
+    int type;
+    float price;
+} Gift;
+
+typedef struct {
+    Gift *gifts;
+    int gift_count;
+    int target_type;
+} ThreadData;
+
+void *process_gifts(void *arg) {
+    ThreadData *data = (ThreadData *)arg;
+    int count = 0;
+    float sum = 0.0;
+
+    for (int i = 0; i < data->gift_count; i++) {
+        if (data->gifts[i].type == data->target_type) {
+            count++;
+            sum += data->gifts[i].price;
+        }
+    }
+
+    if (count > 0) {
+        printf("Typ %d: Počet darčekov = %d, Priemerná cena = %.2f, Celková cena = %.2f\n",
+               data->target_type, count, sum / count, sum);
+    } else {
+        printf("Typ %d: Žiadne darčeky tohto typu.\n", data->target_type);
+    }
+
+    pthread_exit(NULL);
+}
+
+int main() {
+    int gift_count;
+    printf("Zadajte počet darčekov: ");
+    scanf("%d", &gift_count);
+
+    if (gift_count <= 0) {
+        printf("Počet darčekov musí byť väčší ako 0.\n");
+        return 1;
+    }
+
+    // Intervaly cien pre každý typ darčeka
+    int min_price[TYPE_COUNT] = {10, 20, 30};
+    int max_price[TYPE_COUNT] = {50, 100, 150};
+
+    // Vytvorenie poľa darčekov
+    Gift *gifts = malloc(gift_count * sizeof(Gift));
+    if (!gifts) {
+        perror("Nepodarilo sa alokovať pamäť pre darčeky");
+        return 1;
+    }
+
+    // Generovanie náhodných darčekov
+    srand(time(NULL));
+    for (int i = 0; i < gift_count; i++) {
+        int type = (rand() % TYPE_COUNT) + 1;
+        float price = min_price[type - 1] + rand() % (max_price[type - 1] - min_price[type - 1] + 1);
+        gifts[i].type = type;
+        gifts[i].price = price;
+    }
+
+    // Vytvorenie vlákien pre každý typ darčeka
+    pthread_t threads[TYPE_COUNT];
+    ThreadData thread_data[TYPE_COUNT];
+
+    for (int i = 0; i < TYPE_COUNT; i++) {
+        thread_data[i].gifts = gifts;
+        thread_data[i].gift_count = gift_count;
+        thread_data[i].target_type = i + 1;
+
+        if (pthread_create(&threads[i], NULL, process_gifts, &thread_data[i]) != 0) {
+            perror("Chyba pri vytváraní vlákna");
+            free(gifts);
+            return 1;
+        }
+    }
+
+    // Počkajte na dokončenie všetkých vlákien
+    for (int i = 0; i < TYPE_COUNT; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // Uvoľnenie pamäte
+    free(gifts);
+    return 0;
+}
