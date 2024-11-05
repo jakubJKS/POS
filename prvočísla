@@ -1,0 +1,86 @@
+#include <stdio.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define NUM_THREADS 5
+#define MIN_VALUE 1
+#define MAX_VALUE 212
+#define MIN_ARRAY_SIZE 3470
+
+typedef struct {
+    int start;
+    int end;
+    int prime_count;
+} ThreadData;
+
+int *array;  // Dynamic array based on user input
+
+int is_prime(int n) {
+    if (n < 2) return 0;
+    for (int i = 2; i * i <= n; i++) {
+        if (n % i == 0) return 0;
+    }
+    return 1;
+}
+
+void *count_primes(void *arg) {
+    ThreadData *data = (ThreadData *)arg;
+    data->prime_count = 0;
+    for (int i = data->start; i < data->end; i++) {
+        if (is_prime(array[i])) {
+            data->prime_count++;
+        }
+    }
+    pthread_exit(NULL);
+}
+
+int main() {
+    int array_size;
+    printf("Enter the array size (minimum %d): ", MIN_ARRAY_SIZE);
+    scanf("%d", &array_size);
+
+    if (array_size < MIN_ARRAY_SIZE) {
+        printf("Error: Array size must be at least %d.\n", MIN_ARRAY_SIZE);
+        return 1;
+    }
+
+    // Allocate memory for the array based on user input
+    array = (int *)malloc(array_size * sizeof(int));
+    if (array == NULL) {
+        printf("Error: Memory allocation failed.\n");
+        return 1;
+    }
+
+    // Fill the array with random values within the specified range
+    srand(time(NULL));
+    for (int i = 0; i < array_size; i++) {
+        array[i] = MIN_VALUE + rand() % (MAX_VALUE - MIN_VALUE + 1);
+    }
+
+    // Initialize threads and thread data
+    pthread_t threads[NUM_THREADS];
+    ThreadData thread_data[NUM_THREADS];
+    int chunk_size = array_size / NUM_THREADS;
+
+    for (int i = 0; i < NUM_THREADS; i++) {
+        thread_data[i].start = i * chunk_size;
+        thread_data[i].end = (i == NUM_THREADS - 1) ? array_size : (i + 1) * chunk_size;
+        pthread_create(&threads[i], NULL, count_primes, (void *)&thread_data[i]);
+    }
+
+    // Wait for threads to complete and sum their results
+    int total_primes = 0;
+    for (int i = 0; i < NUM_THREADS; i++) {
+        pthread_join(threads[i], NULL);
+        total_primes += thread_data[i].prime_count;
+    }
+
+    // Output results
+    printf("Total number of primes: %d\n", total_primes);
+    printf("Percentage of primes: %.2f%%\n", (100.0 * total_primes) / array_size);
+
+    // Free allocated memory
+    free(array);
+    return 0;
+}
