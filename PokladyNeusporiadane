@@ -1,0 +1,93 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <time.h>
+
+#define MAX_POKLADY 100
+#define MRIEZKA 100
+#define POCET_VLAKIEN 5
+
+typedef struct {
+    int x1, y1, x2, y2;
+} Poklad;
+
+Poklad poklady[MAX_POKLADY];
+int pocet_pokladov;
+
+typedef struct {
+    int id_vlakna;
+    int pokusy;
+} DataVlakna;
+
+void *hladaj_poklad(void *arg) {
+    DataVlakna *data = (DataVlakna *)arg;
+    int najdene_poklady = 0;
+
+    while (najdene_poklady < pocet_pokladov) {
+        // Generovanie náhodných súradníc
+        int x = rand() % MRIEZKA;
+        int y = rand() % MRIEZKA;
+        data->pokusy++;
+
+        // Kontrola, či sú náhodné súradnice v oblasti pokladu
+        for (int i = 0; i < pocet_pokladov; i++) {
+            if (x >= poklady[i].x1 && x <= poklady[i].x2 &&
+                y >= poklady[i].y1 && y <= poklady[i].y2) {
+                najdene_poklady++;
+                break;
+            }
+        }
+    }
+    pthread_exit(NULL);
+}
+
+void nacitaj_poklady(const char *nazov_suboru) {
+    FILE *subor = fopen(nazov_suboru, "r");
+    if (!subor) {
+        perror("Chyba pri otváraní súboru");
+        exit(EXIT_FAILURE);
+    }
+
+    // Prvý riadok obsahuje počet pokladov
+    fscanf(subor, "%d", &pocet_pokladov);
+    for (int i = 0; i < pocet_pokladov; i++) {
+        fscanf(subor, "%d %d %d %d", &poklady[i].x1, &poklady[i].y1, &poklady[i].x2, &poklady[i].y2);
+    }
+    fclose(subor);
+}
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "Použitie: %s <nazov_suboru>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    srand(time(NULL));
+    nacitaj_poklady(argv[1]);
+
+    pthread_t vlakna[POCET_VLAKIEN];
+    DataVlakna data_vlakna[POCET_VLAKIEN];
+
+    // Vytváranie vlákien
+    for (int i = 0; i < POCET_VLAKIEN; i++) {
+        data_vlakna[i].id_vlakna = i + 1;
+        data_vlakna[i].pokusy = 0;
+        if (pthread_create(&vlakna[i], NULL, hladaj_poklad, &data_vlakna[i]) != 0) {
+            perror("Chyba pri vytváraní vlákna");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Čakanie na dokončenie vlákien
+    for (int i = 0; i < POCET_VLAKIEN; i++) {
+        pthread_join(vlakna[i], NULL);
+    }
+
+    // Výpis výsledkov bez usporiadania
+    printf("Počet pokusov pre každého kamaráta:\n");
+    for (int i = 0; i < POCET_VLAKIEN; i++) {
+        printf("Kamarát %d - Počet pokusov: %d\n", data_vlakna[i].id_vlakna, data_vlakna[i].pokusy);
+    }
+
+    return 0;
+}
